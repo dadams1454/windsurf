@@ -23,7 +23,10 @@ jobs:
         node-version: ${{ matrix.node-version }}
         
     - name: Build
-      un: |
-          npm incd backend && npm installstall
-          gruntc 
+  run: |
+run: |
+  cd backend
+  npm install
+  grunt
+      grunt
               working-directory: backend
