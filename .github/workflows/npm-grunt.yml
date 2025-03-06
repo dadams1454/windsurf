@@ -21,9 +21,9 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-          working-directory: backend
+        
     - name: Build
-      run: |
-        npm install
-        grunt
+      un: |
+          npm incd backend && npm installstall
+          gruntc 
               working-directory: backend
