@@ -19,7 +19,8 @@ import SaleDetails from './pages/sales/SaleDetails';
 import PedigreeAnalytics from './pages/pedigree/PedigreeAnalytics';
 import WebsiteBuilder from './pages/website/WebsiteBuilder';
 import FinancialDashboard from './pages/financial/FinancialDashboard';
-import Documents from './pages/documents/Documents';
+import DocumentsList from './pages/documents/DocumentsList';
+import DocumentDetails from './pages/documents/DocumentDetails';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -99,25 +100,36 @@ function App() {
             </ProtectedRoute>
           } />
           
-          {/* Feature Pages */}
-          <Route path="/pedigree" element={
-            <ProtectedRoute>
-              <PedigreeAnalytics />
-            </ProtectedRoute>
-          } />
-          <Route path="/website" element={
-            <ProtectedRoute>
-              <WebsiteBuilder />
-            </ProtectedRoute>
-          } />
+          {/* Financial Dashboard */}
           <Route path="/financial" element={
             <ProtectedRoute>
               <FinancialDashboard />
             </ProtectedRoute>
           } />
+          
+          {/* Documents Management */}
           <Route path="/documents" element={
             <ProtectedRoute>
-              <Documents />
+              <DocumentsList />
+            </ProtectedRoute>
+          } />
+          <Route path="/documents/:id" element={
+            <ProtectedRoute>
+              <DocumentDetails />
+            </ProtectedRoute>
+          } />
+          
+          {/* Website Builder */}
+          <Route path="/website" element={
+            <ProtectedRoute>
+              <WebsiteBuilder />
+            </ProtectedRoute>
+          } />
+          
+          {/* Other Feature Pages */}
+          <Route path="/pedigree" element={
+            <ProtectedRoute>
+              <PedigreeAnalytics />
             </ProtectedRoute>
           } />
           
