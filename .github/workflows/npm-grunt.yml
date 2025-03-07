@@ -15,16 +15,10 @@ jobs:
       uses: actions/checkout@v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: 18
-        
-    - name: Create empty package-lock files to satisfy actions/setup-node
       run: |
-        echo "{}" > package-lock.json
-        mkdir -p backend frontend
-        echo "{}" > backend/package-lock.json
-        echo "{}" > frontend/package-lock.json
+        echo "Using system Node.js"
+        node --version
+        npm --version
         
     - name: Backend - Install Dependencies
       working-directory: ./backend
@@ -33,14 +27,6 @@ jobs:
     - name: Frontend - Install Dependencies
       working-directory: ./frontend
       run: npm install
-        
-    - name: Backend - Install Testing Libraries
-      working-directory: ./backend
-      run: npm install --save-dev jest supertest
-        
-    - name: Frontend - Install Testing Libraries  
-      working-directory: ./frontend
-      run: npm install --save-dev jest @testing-library/react @testing-library/jest-dom
         
     - name: Backend - Run Tests
       working-directory: ./backend
