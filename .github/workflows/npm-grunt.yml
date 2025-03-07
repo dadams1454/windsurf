@@ -21,18 +21,17 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
-        cache: 'npm'
 
     - name: Install Backend Dependencies
       run: |
         cd backend
-        npm install --no-package-lock
+        npm install
         npm install jest supertest --save-dev
       
     - name: Install Frontend Dependencies
       run: |
         cd frontend
-        npm install --no-package-lock
+        npm install
         npm install jest @testing-library/react @testing-library/jest-dom --save-dev
         
     - name: Run Backend Tests
