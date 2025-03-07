@@ -19,6 +19,7 @@ import SaleDetails from './pages/sales/SaleDetails';
 import PedigreeAnalytics from './pages/pedigree/PedigreeAnalytics';
 import WebsiteBuilder from './pages/website/WebsiteBuilder';
 import FinancialDashboard from './pages/financial/FinancialDashboard';
+import Transactions from './pages/financial/Transactions';
 import DocumentsList from './pages/documents/DocumentsList';
 import DocumentDetails from './pages/documents/DocumentDetails';
 
@@ -104,6 +105,11 @@ function App() {
           <Route path="/financial" element={
             <ProtectedRoute>
               <FinancialDashboard />
+            </ProtectedRoute>
+          } />
+          <Route path="/financial/transactions" element={
+            <ProtectedRoute>
+              <Transactions />
             </ProtectedRoute>
           } />
           

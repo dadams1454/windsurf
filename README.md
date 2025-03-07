@@ -47,6 +47,20 @@ A comprehensive SaaS platform designed specifically for dog breeders to manage t
 - Regular Security Audits
 - Compliance Documentation
 
+## New Features & Enhancements
+
+### E-Signature Integration with DocuSign
+- Send documents for signature directly from the platform
+- Track signature status in real-time (sent, pending, signed)
+- Receive webhooks for automated status updates
+- Secure document handling with verification
+
+### Automated Testing Suite
+- Comprehensive test coverage for frontend components
+- API endpoint testing with Jest and Supertest
+- DocuSign webhook testing
+- Consistent testing patterns across all components
+
 ## Tech Stack
 - **Frontend**: React, TypeScript, Material-UI
 - **Backend**: Node.js, Express, TypeScript
@@ -59,16 +73,59 @@ A comprehensive SaaS platform designed specifically for dog breeders to manage t
 ## Getting Started
 
 ### Prerequisites
-- Node.js (v16+)
+- Node.js (v16 or higher)
 - npm or yarn
-- PostgreSQL
-- MongoDB
-- Docker (optional)
+- PostgreSQL database
 
 ### Installation
-Instructions for setting up development environment coming soon.
 
-### Project Structure
+1. Clone the repository
+```bash
+git clone https://github.com/yourusername/dog-breeder-saas.git
+cd dog-breeder-saas
+```
+
+2. Install dependencies for backend and frontend
+```bash
+# Install backend dependencies
+cd backend
+npm install
+
+# Install frontend dependencies
+cd ../frontend
+npm install
+```
+
+3. Set up environment variables
+```bash
+# In backend directory
+cp .env.example .env
+# Edit .env with your database credentials and DocuSign API keys
+```
+
+4. Start the development servers
+```bash
+# Start backend server
+cd backend
+npm run dev
+
+# Start frontend server
+cd ../frontend
+npm start
+```
+
+### Running Tests
+```bash
+# Run backend tests
+cd backend
+npm test
+
+# Run frontend tests
+cd frontend
+npm test
+```
+
+## Project Structure
 - `/frontend` - React frontend application
 - `/backend` - Node.js/Express backend API
 - `/docs` - Project documentation

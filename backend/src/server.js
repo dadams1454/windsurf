@@ -15,6 +15,9 @@ app.use(express.json()); // Parse JSON request body
 app.use(express.urlencoded({ extended: true })); // Parse URL-encoded bodies
 app.use(morgan('dev')); // HTTP request logger
 
+// Import and use DocuSign webhook route
+app.use('/api/docusign', require('./routes/docusign'));
+
 // Simple health check route
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Server is running' });

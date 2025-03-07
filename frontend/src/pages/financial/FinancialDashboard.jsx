@@ -18,90 +18,266 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
-  Select
+  Select,
+  Chip,
+  TextField,
+  Alert,
+  CircularProgress,
+  IconButton
 } from '@mui/material';
 import DownloadIcon from '@mui/icons-material/Download';
 import AddIcon from '@mui/icons-material/Add';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import TrendingDownIcon from '@mui/icons-material/TrendingDown';
 import PrintIcon from '@mui/icons-material/Print';
+import SearchIcon from '@mui/icons-material/Search';
+import FilterListIcon from '@mui/icons-material/FilterList';
+import { Line, Bar, Pie, Doughnut } from 'react-chartjs-2';
+import { Chart as ChartJS, ArcElement, Tooltip, Legend, CategoryScale, LinearScale, PointElement, LineElement, BarElement, Title } from 'chart.js';
+import ApiService from '../../services/api.service';
 
-// In a real app, we would use a charting library like Chart.js or Recharts
-// This is a placeholder for demonstration purposes
-const MockChart = ({ title, height = 200 }) => (
-  <Paper sx={{ p: 2, height: height, display: 'flex', flexDirection: 'column' }}>
-    <Typography variant="h6" gutterBottom>{title}</Typography>
-    <Box sx={{ 
-      flexGrow: 1, 
-      bgcolor: 'background.default', 
-      border: '1px dashed', 
-      borderColor: 'divider',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center'
-    }}>
-      <Typography variant="body2" color="text.secondary">
-        [Chart Visualization]
-      </Typography>
-    </Box>
-  </Paper>
+// Register ChartJS components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Tooltip,
+  Legend,
+  Title
 );
 
 const FinancialDashboard = () => {
   const [timeFrame, setTimeFrame] = useState('year');
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [financialData, setFinancialData] = useState(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [transactions, setTransactions] = useState([]);
+  const [filteredTransactions, setFilteredTransactions] = useState([]);
 
-  // Mock data fetch
   useEffect(() => {
-    // In a real implementation, this would be an API call with the timeFrame as parameter
-    setTimeout(() => {
-      setFinancialData({
-        summary: {
-          totalRevenue: 28500,
-          totalExpenses: 12350,
-          netIncome: 16150,
-          revenueChange: 12.5, // percentage change from previous period
-          expenseChange: 8.2,
-          netIncomeChange: 15.4
-        },
-        revenue: {
-          puppySales: 25000,
-          studFees: 3500,
-          other: 0
-        },
-        expenses: {
-          veterinary: 4500,
-          food: 2800,
-          supplies: 1200,
-          advertising: 850,
-          registration: 600,
-          utilities: 1400,
-          other: 1000
-        },
-        recentTransactions: [
-          { id: 1, date: '2025-03-01', description: 'Puppy Sale - Golden Retriever Male', amount: 2500, type: 'Income' },
-          { id: 2, date: '2025-02-25', description: 'Veterinary Visit - Vaccinations', amount: 450, type: 'Expense' },
-          { id: 3, date: '2025-02-20', description: 'Puppy Sale - Golden Retriever Female', amount: 2500, type: 'Income' },
-          { id: 4, date: '2025-02-15', description: 'Dog Food - Premium Brand', amount: 280, type: 'Expense' },
-          { id: 5, date: '2025-02-10', description: 'Stud Service Fee', amount: 1500, type: 'Income' },
-        ]
-      });
-      setLoading(false);
-    }, 800);
+    fetchFinancialData();
   }, [timeFrame]);
+
+  useEffect(() => {
+    if (transactions.length > 0) {
+      filterTransactions();
+    }
+  }, [searchTerm, transactions]);
+
+  const fetchFinancialData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      // Fetch financial summary
+      const summaryResponse = await ApiService.getFinancialSummary({ period: timeFrame });
+      
+      // Fetch revenue breakdown
+      const revenueResponse = await ApiService.getRevenue({ period: timeFrame });
+      
+      // Fetch expense breakdown
+      const expensesResponse = await ApiService.getExpenses({ period: timeFrame });
+      
+      // Fetch transactions
+      const transactionsResponse = await ApiService.getTransactions({ 
+        period: timeFrame,
+        limit: 10, // Get last 10 transactions for the dashboard
+        sort: 'date:desc'
+      });
+      
+      // Combine all data
+      setFinancialData({
+        summary: summaryResponse.data,
+        revenue: revenueResponse.data,
+        expenses: expensesResponse.data
+      });
+      
+      setTransactions(transactionsResponse.data);
+      setFilteredTransactions(transactionsResponse.data);
+      
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching financial data:', err);
+      setError('Failed to load financial data. Please try again later.');
+      setLoading(false);
+    }
+  };
+
+  const filterTransactions = () => {
+    if (!searchTerm.trim()) {
+      setFilteredTransactions(transactions);
+      return;
+    }
+
+    const filtered = transactions.filter(transaction => 
+      transaction.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.type.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.amount.toString().includes(searchTerm)
+    );
+    
+    setFilteredTransactions(filtered);
+  };
 
   const handleTimeFrameChange = (event) => {
     setTimeFrame(event.target.value);
-    setLoading(true);
   };
 
+  const handleSearchChange = (event) => {
+    setSearchTerm(event.target.value);
+  };
+
+  // Handle empty state
+  const renderEmptyState = () => (
+    <Box sx={{ mt: 4, textAlign: 'center' }}>
+      <Typography variant="h6" color="text.secondary" sx={{ mb: 2 }}>
+        No financial data available
+      </Typography>
+      <Button
+        variant="contained"
+        startIcon={<AddIcon />}
+        onClick={() => {
+          // Navigate to transaction form or open a dialog
+        }}
+      >
+        Add Your First Transaction
+      </Button>
+    </Box>
+  );
+
+  // Chart configurations
+  const prepareRevenueVsExpensesChart = () => {
+    if (!financialData) return null;
+
+    // Prepare data for a 12-month period
+    const labels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    
+    // Get the monthly data from API response
+    const revenueData = financialData.summary.monthlyRevenue || Array(12).fill(0);
+    const expenseData = financialData.summary.monthlyExpenses || Array(12).fill(0);
+    
+    return {
+      labels,
+      datasets: [
+        {
+          label: 'Revenue',
+          data: revenueData,
+          borderColor: 'rgba(75, 192, 192, 1)',
+          backgroundColor: 'rgba(75, 192, 192, 0.2)',
+          tension: 0.1
+        },
+        {
+          label: 'Expenses',
+          data: expenseData,
+          borderColor: 'rgba(255, 99, 132, 1)',
+          backgroundColor: 'rgba(255, 99, 132, 0.2)',
+          tension: 0.1
+        }
+      ]
+    };
+  };
+
+  const prepareRevenueBreakdownChart = () => {
+    if (!financialData?.revenue) return null;
+
+    const labels = Object.keys(financialData.revenue).filter(key => key !== 'total');
+    const data = labels.map(key => financialData.revenue[key] || 0);
+    
+    return {
+      labels,
+      datasets: [
+        {
+          data,
+          backgroundColor: [
+            'rgba(75, 192, 192, 0.6)',
+            'rgba(54, 162, 235, 0.6)',
+            'rgba(255, 206, 86, 0.6)',
+            'rgba(255, 99, 132, 0.6)',
+            'rgba(153, 102, 255, 0.6)',
+          ],
+          borderColor: [
+            'rgba(75, 192, 192, 1)',
+            'rgba(54, 162, 235, 1)',
+            'rgba(255, 206, 86, 1)',
+            'rgba(255, 99, 132, 1)',
+            'rgba(153, 102, 255, 1)',
+          ],
+          borderWidth: 1,
+        }
+      ]
+    };
+  };
+
+  const prepareExpenseBreakdownChart = () => {
+    if (!financialData?.expenses) return null;
+
+    const labels = Object.keys(financialData.expenses).filter(key => key !== 'total');
+    const data = labels.map(key => financialData.expenses[key] || 0);
+    
+    return {
+      labels,
+      datasets: [
+        {
+          data,
+          backgroundColor: [
+            'rgba(255, 99, 132, 0.6)',
+            'rgba(54, 162, 235, 0.6)',
+            'rgba(255, 206, 86, 0.6)',
+            'rgba(75, 192, 192, 0.6)',
+            'rgba(153, 102, 255, 0.6)',
+            'rgba(255, 159, 64, 0.6)',
+            'rgba(201, 203, 207, 0.6)'
+          ],
+          borderColor: [
+            'rgba(255, 99, 132, 1)',
+            'rgba(54, 162, 235, 1)',
+            'rgba(255, 206, 86, 1)',
+            'rgba(75, 192, 192, 1)',
+            'rgba(153, 102, 255, 1)',
+            'rgba(255, 159, 64, 1)',
+            'rgba(201, 203, 207, 1)'
+          ],
+          borderWidth: 1,
+        }
+      ]
+    };
+  };
+
+  // Loading state
   if (loading) {
     return (
       <Container>
-        <Box sx={{ mt: 4 }}>
-          <Typography>Loading financial data...</Typography>
+        <Box sx={{ mt: 10, display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+          <CircularProgress />
+          <Typography sx={{ mt: 2 }}>Loading financial data...</Typography>
         </Box>
+      </Container>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <Container>
+        <Box sx={{ mt: 4 }}>
+          <Alert severity="error" sx={{ mb: 2 }}>
+            {error}
+          </Alert>
+          <Button variant="contained" onClick={fetchFinancialData}>
+            Try Again
+          </Button>
+        </Box>
+      </Container>
+    );
+  }
+
+  // Empty state
+  if (!financialData || !transactions.length) {
+    return (
+      <Container>
+        {renderEmptyState()}
       </Container>
     );
   }
@@ -163,12 +339,15 @@ const FinancialDashboard = () => {
                     <Typography variant="subtitle2" color="text.secondary">
                       Total Revenue
                     </Typography>
-                    <Typography variant="h4">${financialData.summary.totalRevenue.toLocaleString()}</Typography>
+                    <Typography variant="h4">${financialData.summary.totalRevenue?.toLocaleString() || '0'}</Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', color: 'success.main' }}>
-                    <TrendingUpIcon sx={{ mr: 0.5 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', color: financialData.summary.revenueChange >= 0 ? 'success.main' : 'error.main' }}>
+                    {financialData.summary.revenueChange >= 0 ? 
+                      <TrendingUpIcon sx={{ mr: 0.5 }} /> : 
+                      <TrendingDownIcon sx={{ mr: 0.5 }} />
+                    }
                     <Typography variant="body2">
-                      {financialData.summary.revenueChange}%
+                      {Math.abs(financialData.summary.revenueChange)}%
                     </Typography>
                   </Box>
                 </Box>
@@ -183,12 +362,15 @@ const FinancialDashboard = () => {
                     <Typography variant="subtitle2" color="text.secondary">
                       Total Expenses
                     </Typography>
-                    <Typography variant="h4">${financialData.summary.totalExpenses.toLocaleString()}</Typography>
+                    <Typography variant="h4">${financialData.summary.totalExpenses?.toLocaleString() || '0'}</Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', color: 'error.main' }}>
-                    <TrendingUpIcon sx={{ mr: 0.5 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', color: financialData.summary.expenseChange <= 0 ? 'success.main' : 'error.main' }}>
+                    {financialData.summary.expenseChange <= 0 ? 
+                      <TrendingDownIcon sx={{ mr: 0.5 }} /> : 
+                      <TrendingUpIcon sx={{ mr: 0.5 }} />
+                    }
                     <Typography variant="body2">
-                      {financialData.summary.expenseChange}%
+                      {Math.abs(financialData.summary.expenseChange)}%
                     </Typography>
                   </Box>
                 </Box>
@@ -203,12 +385,15 @@ const FinancialDashboard = () => {
                     <Typography variant="subtitle2" color="text.secondary">
                       Net Income
                     </Typography>
-                    <Typography variant="h4">${financialData.summary.netIncome.toLocaleString()}</Typography>
+                    <Typography variant="h4">${financialData.summary.netIncome?.toLocaleString() || '0'}</Typography>
                   </Box>
-                  <Box sx={{ display: 'flex', alignItems: 'center', color: 'success.main' }}>
-                    <TrendingUpIcon sx={{ mr: 0.5 }} />
+                  <Box sx={{ display: 'flex', alignItems: 'center', color: financialData.summary.netIncomeChange >= 0 ? 'success.main' : 'error.main' }}>
+                    {financialData.summary.netIncomeChange >= 0 ? 
+                      <TrendingUpIcon sx={{ mr: 0.5 }} /> : 
+                      <TrendingDownIcon sx={{ mr: 0.5 }} />
+                    }
                     <Typography variant="body2">
-                      {financialData.summary.netIncomeChange}%
+                      {Math.abs(financialData.summary.netIncomeChange)}%
                     </Typography>
                   </Box>
                 </Box>
@@ -220,121 +405,96 @@ const FinancialDashboard = () => {
         {/* Charts Section */}
         <Grid container spacing={3} sx={{ mb: 4 }}>
           <Grid item xs={12} md={8}>
-            <MockChart title="Revenue vs Expenses" height={300} />
+            <Paper sx={{ p: 2, height: 300 }}>
+              <Typography variant="h6" gutterBottom>Revenue vs Expenses</Typography>
+              <Box sx={{ height: 250 }}>
+                {prepareRevenueVsExpensesChart() && (
+                  <Line 
+                    data={prepareRevenueVsExpensesChart()} 
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'top',
+                        },
+                        title: {
+                          display: false
+                        }
+                      }
+                    }}
+                  />
+                )}
+              </Box>
+            </Paper>
           </Grid>
           <Grid item xs={12} md={4}>
-            <MockChart title="Revenue Breakdown" />
-            <Box sx={{ mt: 3 }}>
-              <MockChart title="Expense Breakdown" />
+            <Paper sx={{ p: 2, height: 140 }}>
+              <Typography variant="h6" gutterBottom>Revenue Breakdown</Typography>
+              <Box sx={{ height: 100 }}>
+                {prepareRevenueBreakdownChart() && (
+                  <Doughnut 
+                    data={prepareRevenueBreakdownChart()} 
+                    options={{
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: {
+                          position: 'right',
+                          labels: {
+                            boxWidth: 12
+                          }
+                        }
+                      }
+                    }}
+                  />
+                )}
+              </Box>
+            </Paper>
+            <Box sx={{ mt: 2 }}>
+              <Paper sx={{ p: 2, height: 140 }}>
+                <Typography variant="h6" gutterBottom>Expense Breakdown</Typography>
+                <Box sx={{ height: 100 }}>
+                  {prepareExpenseBreakdownChart() && (
+                    <Doughnut 
+                      data={prepareExpenseBreakdownChart()} 
+                      options={{
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                          legend: {
+                            position: 'right',
+                            labels: {
+                              boxWidth: 12
+                            }
+                          }
+                        }
+                      }}
+                    />
+                  )}
+                </Box>
+              </Paper>
             </Box>
           </Grid>
         </Grid>
 
-        {/* Revenue Breakdown */}
-        <Grid container spacing={3} sx={{ mb: 4 }}>
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Revenue Breakdown</Typography>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Category</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                      <TableCell align="right">Percentage</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Puppy Sales</TableCell>
-                      <TableCell align="right">${financialData.revenue.puppySales.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.revenue.puppySales / financialData.summary.totalRevenue * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Stud Fees</TableCell>
-                      <TableCell align="right">${financialData.revenue.studFees.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.revenue.studFees / financialData.summary.totalRevenue * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Other Income</TableCell>
-                      <TableCell align="right">${financialData.revenue.other.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.revenue.other / financialData.summary.totalRevenue * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><strong>Total</strong></TableCell>
-                      <TableCell align="right"><strong>${financialData.summary.totalRevenue.toLocaleString()}</strong></TableCell>
-                      <TableCell align="right"><strong>100%</strong></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          </Grid>
-          <Grid item xs={12} md={6}>
-            <Paper sx={{ p: 2 }}>
-              <Typography variant="h6" gutterBottom>Expense Breakdown</Typography>
-              <TableContainer>
-                <Table size="small">
-                  <TableHead>
-                    <TableRow>
-                      <TableCell>Category</TableCell>
-                      <TableCell align="right">Amount</TableCell>
-                      <TableCell align="right">Percentage</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell>Veterinary</TableCell>
-                      <TableCell align="right">${financialData.expenses.veterinary.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.expenses.veterinary / financialData.summary.totalExpenses * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Food</TableCell>
-                      <TableCell align="right">${financialData.expenses.food.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.expenses.food / financialData.summary.totalExpenses * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Supplies</TableCell>
-                      <TableCell align="right">${financialData.expenses.supplies.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.expenses.supplies / financialData.summary.totalExpenses * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Advertising</TableCell>
-                      <TableCell align="right">${financialData.expenses.advertising.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.expenses.advertising / financialData.summary.totalExpenses * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Registration</TableCell>
-                      <TableCell align="right">${financialData.expenses.registration.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.expenses.registration / financialData.summary.totalExpenses * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Utilities</TableCell>
-                      <TableCell align="right">${financialData.expenses.utilities.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.expenses.utilities / financialData.summary.totalExpenses * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell>Other</TableCell>
-                      <TableCell align="right">${financialData.expenses.other.toLocaleString()}</TableCell>
-                      <TableCell align="right">{Math.round(financialData.expenses.other / financialData.summary.totalExpenses * 100)}%</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell><strong>Total</strong></TableCell>
-                      <TableCell align="right"><strong>${financialData.summary.totalExpenses.toLocaleString()}</strong></TableCell>
-                      <TableCell align="right"><strong>100%</strong></TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-              </TableContainer>
-            </Paper>
-          </Grid>
-        </Grid>
-
-        {/* Recent Transactions */}
+        {/* Transaction History */}
         <Paper sx={{ p: 2 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
             <Typography variant="h6">Recent Transactions</Typography>
-            <Button variant="outlined">View All</Button>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <TextField
+                size="small"
+                placeholder="Search transactions..."
+                value={searchTerm}
+                onChange={handleSearchChange}
+                InputProps={{
+                  startAdornment: <SearchIcon fontSize="small" sx={{ mr: 1, color: 'text.secondary' }} />,
+                }}
+                sx={{ mr: 2, width: 250 }}
+              />
+              <Button variant="outlined" component="a" href="/financial/transactions">View All</Button>
+            </Box>
           </Box>
           <TableContainer>
             <Table>
@@ -347,26 +507,36 @@ const FinancialDashboard = () => {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {financialData.recentTransactions.map((transaction) => (
-                  <TableRow key={transaction.id}>
-                    <TableCell>{transaction.date}</TableCell>
-                    <TableCell>{transaction.description}</TableCell>
-                    <TableCell>
-                      <Chip 
-                        label={transaction.type} 
-                        color={transaction.type === 'Income' ? 'success' : 'error'} 
-                        size="small" 
-                      />
-                    </TableCell>
-                    <TableCell align="right">
-                      <Typography 
-                        color={transaction.type === 'Income' ? 'success.main' : 'error.main'}
-                      >
-                        {transaction.type === 'Income' ? '+' : '-'}${transaction.amount.toLocaleString()}
+                {filteredTransactions.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} align="center">
+                      <Typography variant="body2" color="text.secondary">
+                        No transactions found
                       </Typography>
                     </TableCell>
                   </TableRow>
-                ))}
+                ) : (
+                  filteredTransactions.map((transaction) => (
+                    <TableRow key={transaction.id}>
+                      <TableCell>{new Date(transaction.date).toLocaleDateString()}</TableCell>
+                      <TableCell>{transaction.description}</TableCell>
+                      <TableCell>
+                        <Chip 
+                          label={transaction.type} 
+                          color={transaction.type === 'Income' ? 'success' : 'error'} 
+                          size="small" 
+                        />
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography 
+                          color={transaction.type === 'Income' ? 'success.main' : 'error.main'}
+                        >
+                          {transaction.type === 'Income' ? '+' : '-'}${transaction.amount.toLocaleString()}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                )}
               </TableBody>
             </Table>
           </TableContainer>

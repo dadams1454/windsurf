@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Box,
@@ -23,7 +23,15 @@ import {
   ListItem,
   ListItemText,
   ListItemSecondaryAction,
-  IconButton
+  IconButton,
+  CircularProgress,
+  Alert,
+  Snackbar,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogContentText,
+  DialogTitle
 } from '@mui/material';
 import { styled } from '@mui/material/styles';
 import AddIcon from '@mui/icons-material/Add';
@@ -36,6 +44,8 @@ import ColorLensIcon from '@mui/icons-material/ColorLens';
 import SettingsIcon from '@mui/icons-material/Settings';
 import ImageIcon from '@mui/icons-material/Image';
 import FormatPaintIcon from '@mui/icons-material/FormatPaint';
+import ApiService from '../../services/api.service';
+import PageEditor from './PageEditor';
 
 // Mock preview component - in a real implementation, this would render an iframe or similar
 const WebsitePreview = styled(Paper)(({ theme }) => ({
@@ -75,6 +85,14 @@ const ColorBox = styled(Box)(({ theme, color }) => ({
 
 const WebsiteBuilder = () => {
   const [activeTab, setActiveTab] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+  const [saveError, setSaveError] = useState(false);
+  const [currentPage, setCurrentPage] = useState(null);
+  const [editingPage, setEditingPage] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState({ open: false, pageId: null });
+  
   const [theme, setTheme] = useState({
     primaryColor: '#3f51b5',
     secondaryColor: '#f50057',
@@ -113,6 +131,84 @@ const WebsiteBuilder = () => {
   
   const [selectedTemplate, setSelectedTemplate] = useState('modern');
 
+  // Fetch website configuration from the API
+  useEffect(() => {
+    fetchWebsiteData();
+  }, []);
+
+  const fetchWebsiteData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch website configuration
+      const websiteConfigResponse = await ApiService.getWebsiteConfig();
+      
+      if (websiteConfigResponse.data) {
+        const websiteData = websiteConfigResponse.data;
+        
+        // Update state with data from API
+        setSiteSettings({
+          siteName: websiteData.siteName || 'My Kennel Website',
+          tagline: websiteData.welcomeMessage || '',
+          logo: websiteData.logo || null,
+          favicon: websiteData.faviconUrl || null,
+          showBreedInfo: websiteData.showAdultDogs || true,
+          showTestimonials: websiteData.showTestimonials || true,
+          showAvailablePuppies: websiteData.showAvailablePuppies || true,
+          showUpcomingLitters: websiteData.showUpcomingLitters || true,
+          showContactForm: websiteData.showContactForm || true,
+          showAboutUs: !!websiteData.aboutContent,
+        });
+        
+        setTheme({
+          primaryColor: websiteData.primaryColor || '#3f51b5',
+          secondaryColor: websiteData.secondaryColor || '#f50057',
+          backgroundColor: websiteData.backgroundColor || '#ffffff',
+          fontColor: '#000000', // Default since it might not be in the API
+          fontFamily: websiteData.fontFamily || 'Roboto'
+        });
+        
+        setSelectedTemplate(websiteData.templateId || 'modern');
+      }
+      
+      // Fetch website pages
+      const pagesResponse = await ApiService.getWebsitePages();
+      
+      if (pagesResponse.data && pagesResponse.data.length > 0) {
+        const mappedPages = pagesResponse.data.map(page => ({
+          id: page.id,
+          title: page.title,
+          slug: page.slug,
+          isDefault: page.slug === 'home',
+          published: page.isPublished,
+          content: page.content,
+          type: page.pageType,
+          inMenu: page.isInMenu,
+          menuOrder: page.menuOrder
+        }));
+        
+        setPages(mappedPages);
+      }
+      
+      // Fetch website templates (if available)
+      try {
+        const templatesResponse = await ApiService.getWebsiteTemplates();
+        if (templatesResponse.data && templatesResponse.data.length > 0) {
+          setTemplates(templatesResponse.data);
+        }
+      } catch (templatesError) {
+        console.error('Error fetching templates:', templatesError);
+        // Don't set main error - templates are not critical
+      }
+      
+      setLoading(false);
+    } catch (err) {
+      console.error('Error fetching website data:', err);
+      setError('Failed to load website configuration. Please try again.');
+      setLoading(false);
+    }
+  };
+
   const handleTabChange = (event, newValue) => {
     setActiveTab(newValue);
   };
@@ -133,22 +229,237 @@ const WebsiteBuilder = () => {
 
   const handleAddPage = () => {
     const newPage = {
-      id: `page-${pages.length + 1}`,
-      title: `New Page ${pages.length + 1}`,
+      id: `new-page-${Date.now()}`, // Temporary ID until saved
+      title: `New Page`,
       isDefault: false,
-      published: false
+      published: false,
+      slug: `new-page-${Date.now()}`,
+      content: '',
+      type: 'Standard',
+      inMenu: true,
+      menuOrder: pages.length
     };
     setPages([...pages, newPage]);
+  };
+
+  const handleDeletePage = async (pageId) => {
+    // Don't allow deleting the home page
+    const pageToDelete = pages.find(p => p.id === pageId);
+    if (pageToDelete && pageToDelete.isDefault) {
+      setSaveError(true);
+      return;
+    }
+
+    try {
+      // Only call API if the page is already saved (not a new unsaved page)
+      if (!pageId.startsWith('new-page')) {
+        await ApiService.deleteWebsitePage(pageId);
+      }
+      
+      // Update local state
+      setPages(pages.filter(page => page.id !== pageId));
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error('Error deleting page:', err);
+      setSaveError(true);
+    }
   };
 
   const handleTemplateSelect = (templateId) => {
     setSelectedTemplate(templateId);
   };
 
-  const handlePublishWebsite = () => {
-    alert('Website published successfully!');
-    // In a real app, this would call an API to publish the website
+  const handleSaveWebsiteConfig = async () => {
+    try {
+      // Map our UI state back to API format
+      const websiteConfig = {
+        siteName: siteSettings.siteName,
+        welcomeMessage: siteSettings.tagline,
+        logo: siteSettings.logo,
+        faviconUrl: siteSettings.favicon,
+        primaryColor: theme.primaryColor,
+        secondaryColor: theme.secondaryColor,
+        backgroundColor: theme.backgroundColor,
+        fontFamily: theme.fontFamily,
+        templateId: selectedTemplate,
+        showAdultDogs: siteSettings.showBreedInfo,
+        showTestimonials: siteSettings.showTestimonials,
+        showAvailablePuppies: siteSettings.showAvailablePuppies,
+        showUpcomingLitters: siteSettings.showUpcomingLitters,
+        showContactForm: siteSettings.showContactForm,
+        aboutContent: siteSettings.showAboutUs ? siteSettings.aboutContent || "About our kennel" : null
+      };
+      
+      await ApiService.updateWebsiteConfig(websiteConfig);
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error('Error saving website configuration:', err);
+      setSaveError(true);
+    }
   };
+
+  const handlePublishWebsite = async () => {
+    try {
+      await ApiService.publishWebsite();
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error('Error publishing website:', err);
+      setSaveError(true);
+    }
+  };
+
+  const handleSavePage = async (page) => {
+    try {
+      let savedPage;
+      
+      if (page.id.startsWith('new-page')) {
+        // This is a new page, create it
+        savedPage = await ApiService.createWebsitePage({
+          title: page.title,
+          slug: page.slug,
+          content: page.content,
+          isPublished: page.published,
+          pageType: page.type,
+          isInMenu: page.inMenu,
+          menuOrder: page.menuOrder
+        });
+        
+        // Replace the temporary page with the saved one
+        setPages(pages.map(p => 
+          p.id === page.id ? {
+            ...page,
+            id: savedPage.data.id
+          } : p
+        ));
+      } else {
+        // This is an existing page, update it
+        savedPage = await ApiService.updateWebsitePage(page.id, {
+          title: page.title,
+          slug: page.slug,
+          content: page.content,
+          isPublished: page.published,
+          pageType: page.type,
+          isInMenu: page.inMenu,
+          menuOrder: page.menuOrder
+        });
+      }
+      
+      setSaveSuccess(true);
+    } catch (err) {
+      console.error('Error saving page:', err);
+      setSaveError(true);
+    }
+  };
+
+  const handleSavePageFromEditor = async (pageData) => {
+    try {
+      // Don't call handleSavePage to avoid recursion
+      if (pageData.id && pageData.id.startsWith('new-page')) {
+        // Create a new page
+        await ApiService.createWebsitePage({
+          title: pageData.title,
+          slug: pageData.slug,
+          content: pageData.content,
+          isPublished: pageData.isPublished,
+          pageType: pageData.pageType,
+          isInMenu: pageData.isInMenu,
+          menuOrder: pageData.menuOrder,
+          metaTitle: pageData.metaTitle,
+          metaDescription: pageData.metaDescription,
+          headerImageUrl: pageData.headerImageUrl
+        });
+      } else {
+        // Update existing page
+        await ApiService.updateWebsitePage(pageData.id, {
+          title: pageData.title,
+          slug: pageData.slug,
+          content: pageData.content,
+          isPublished: pageData.isPublished,
+          pageType: pageData.pageType,
+          isInMenu: pageData.isInMenu,
+          menuOrder: pageData.menuOrder,
+          metaTitle: pageData.metaTitle,
+          metaDescription: pageData.metaDescription,
+          headerImageUrl: pageData.headerImageUrl
+        });
+      }
+      
+      setSaveSuccess(true);
+      return true;
+    } catch (err) {
+      console.error('Error saving page:', err);
+      setSaveError(true);
+      return false;
+    }
+  };
+
+  const handleCloseSnackbar = () => {
+    setSaveSuccess(false);
+    setSaveError(false);
+  };
+
+  const handleEditPage = (page) => {
+    setCurrentPage(page);
+    setEditingPage(true);
+  };
+
+  const handleBackToPagesList = () => {
+    setCurrentPage(null);
+    setEditingPage(false);
+    // Refresh the page list
+    fetchWebsiteData();
+  };
+
+  const handleOpenDeleteConfirm = (pageId) => {
+    setConfirmDelete({ open: true, pageId });
+  };
+
+  const handleCloseDeleteConfirm = () => {
+    setConfirmDelete({ open: false, pageId: null });
+  };
+
+  const handleConfirmDelete = () => {
+    if (confirmDelete.pageId) {
+      handleDeletePage(confirmDelete.pageId);
+    }
+    handleCloseDeleteConfirm();
+  };
+
+  if (loading) {
+    return (
+      <Container>
+        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+          <CircularProgress />
+        </Box>
+      </Container>
+    );
+  }
+
+  if (error) {
+    return (
+      <Container>
+        <Box sx={{ mt: 4 }}>
+          <Alert severity="error">{error}</Alert>
+          <Button variant="contained" sx={{ mt: 2 }} onClick={fetchWebsiteData}>
+            Try Again
+          </Button>
+        </Box>
+      </Container>
+    );
+  }
+
+  // Render the page editor if editing a page
+  if (editingPage) {
+    return (
+      <Container>
+        <PageEditor 
+          pageId={currentPage.id} 
+          onBack={handleBackToPagesList} 
+          onSave={handleSavePageFromEditor} 
+        />
+      </Container>
+    );
+  }
 
   return (
     <Container>
@@ -330,27 +641,77 @@ const WebsiteBuilder = () => {
                         startIcon={<AddIcon />}
                         onClick={handleAddPage}
                       >
-                        Add Page
+                        Add New Page
                       </Button>
                     </Box>
+                    
                     <List>
-                      {pages.map((page) => (
-                        <ListItem key={page.id}>
-                          <ListItemText 
-                            primary={page.title} 
-                            secondary={page.isDefault ? 'Homepage' : (page.published ? 'Published' : 'Draft')} 
+                      {pages.map(page => (
+                        <ListItem 
+                          key={page.id} 
+                          divider
+                          secondaryAction={
+                            <Box>
+                              <IconButton 
+                                edge="end" 
+                                aria-label="edit"
+                                onClick={() => handleEditPage(page)}
+                                sx={{ mr: 1 }}
+                              >
+                                <EditIcon />
+                              </IconButton>
+                              {!page.isDefault && (
+                                <IconButton 
+                                  edge="end" 
+                                  aria-label="delete"
+                                  onClick={() => handleOpenDeleteConfirm(page.id)}
+                                >
+                                  <DeleteIcon />
+                                </IconButton>
+                              )}
+                            </Box>
+                          }
+                        >
+                          <ListItemText
+                            primary={
+                              <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                {page.title}
+                                {page.isDefault && (
+                                  <Typography variant="caption" sx={{ ml: 1, backgroundColor: '#e3f2fd', p: '2px 6px', borderRadius: '4px' }}>
+                                    Homepage
+                                  </Typography>
+                                )}
+                                {!page.published && (
+                                  <Typography variant="caption" sx={{ ml: 1, backgroundColor: '#ffebee', p: '2px 6px', borderRadius: '4px' }}>
+                                    Draft
+                                  </Typography>
+                                )}
+                              </Box>
+                            }
+                            secondary={
+                              <Box sx={{ display: 'flex', alignItems: 'center', mt: 0.5 }}>
+                                <Typography variant="caption" color="text.secondary">
+                                  URL: /{page.slug || page.id}
+                                </Typography>
+                                {page.inMenu && (
+                                  <Typography variant="caption" sx={{ ml: 1, backgroundColor: '#f1f8e9', p: '2px 6px', borderRadius: '4px' }}>
+                                    In Menu (Order: {page.menuOrder || 0})
+                                  </Typography>
+                                )}
+                              </Box>
+                            }
                           />
-                          <ListItemSecondaryAction>
-                            <IconButton edge="end" aria-label="edit">
-                              <EditIcon />
-                            </IconButton>
-                            <IconButton edge="end" aria-label="delete" sx={{ ml: 1 }}>
-                              <DeleteIcon />
-                            </IconButton>
-                          </ListItemSecondaryAction>
                         </ListItem>
                       ))}
                     </List>
+                    
+                    {pages.length === 0 && (
+                      <Box sx={{ textAlign: 'center', p: 3, bgcolor: '#f5f5f5', borderRadius: 1 }}>
+                        <Typography variant="body1" color="text.secondary">
+                          No pages found. Click "Add New Page" to create your first page.
+                        </Typography>
+                      </Box>
+                    )}
                   </Box>
                 )}
 
@@ -470,6 +831,15 @@ const WebsiteBuilder = () => {
                   </Box>
                 )}
               </Box>
+              <Box sx={{ p: 2, display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #ddd' }}>
+                <Button 
+                  variant="contained" 
+                  startIcon={<SaveIcon />}
+                  onClick={handleSaveWebsiteConfig}
+                >
+                  Save Changes
+                </Button>
+              </Box>
             </Paper>
           </Grid>
 
@@ -537,6 +907,38 @@ const WebsiteBuilder = () => {
           </Grid>
         </Grid>
       </Box>
+      
+      {/* Success/Error messages */}
+      <Snackbar open={saveSuccess} autoHideDuration={6000} onClose={handleCloseSnackbar}>
+        <Alert onClose={handleCloseSnackbar} severity="success" sx={{ width: '100%' }}>
+          Changes saved successfully!
+        </Alert>
+      </Snackbar>
+      
+      <Snackbar open={saveError} autoHideDuration={6000} onClose={handleCloseSnackbar}>
+        <Alert onClose={handleCloseSnackbar} severity="error" sx={{ width: '100%' }}>
+          Error saving changes. Please try again.
+        </Alert>
+      </Snackbar>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={confirmDelete.open}
+        onClose={handleCloseDeleteConfirm}
+      >
+        <DialogTitle>Confirm Delete</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to delete this page? This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseDeleteConfirm}>Cancel</Button>
+          <Button onClick={handleConfirmDelete} color="error" autoFocus>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };

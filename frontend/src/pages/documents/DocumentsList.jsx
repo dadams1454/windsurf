@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Typography,
   Box,
@@ -24,7 +24,9 @@ import {
   MenuItem,
   Grid,
   Chip,
-  IconButton
+  IconButton,
+  Snackbar,
+  Alert
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import SearchIcon from '@mui/icons-material/Search';
@@ -39,6 +41,9 @@ import InsertDriveFileIcon from '@mui/icons-material/InsertDriveFile';
 import ArticleIcon from '@mui/icons-material/Article';
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
 import ImageIcon from '@mui/icons-material/Image';
+import DocumentGenerator from './DocumentGenerator';
+import ApiService from '../../services/api.service';
+import DocuSignService from '../../services/docusign.service';
 
 const DocumentsList = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -50,70 +55,48 @@ const DocumentsList = () => {
     type: 'contract',
     tags: []
   });
-  
-  // Mock data for demonstration
-  const [documents, setDocuments] = useState([
-    {
-      id: 1,
-      title: 'Puppy Purchase Agreement',
-      type: 'contract',
-      format: 'pdf',
-      dateCreated: '2025-01-15',
-      dateModified: '2025-02-20',
-      tags: ['sales', 'legal'],
-      shared: false
-    },
-    {
-      id: 2,
-      title: 'Health Guarantee',
-      type: 'contract',
-      format: 'docx',
-      dateCreated: '2025-01-20',
-      dateModified: '2025-01-20',
-      tags: ['health', 'legal'],
-      shared: true
-    },
-    {
-      id: 3,
-      title: 'Vaccination Record Template',
-      type: 'template',
-      format: 'pdf',
-      dateCreated: '2025-02-05',
-      dateModified: '2025-02-10',
-      tags: ['health', 'puppies'],
-      shared: false
-    },
-    {
-      id: 4,
-      title: 'Breeding Rights Agreement',
-      type: 'contract',
-      format: 'pdf',
-      dateCreated: '2025-02-15',
-      dateModified: '2025-02-15',
-      tags: ['breeding', 'legal'],
-      shared: false
-    },
-    {
-      id: 5,
-      title: 'Kennel Logo',
-      type: 'image',
-      format: 'png',
-      dateCreated: '2025-01-10',
-      dateModified: '2025-01-10',
-      tags: ['branding'],
-      shared: true
-    },
-    {
-      id: 6,
-      title: 'Litter Announcement Template',
-      type: 'template',
-      format: 'docx',
-      dateCreated: '2025-03-01',
-      dateModified: '2025-03-01',
-      tags: ['marketing', 'litters'],
-      shared: false
+  const [documents, setDocuments] = useState([]);
+  const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
+
+  useEffect(() => {
+    fetchDocuments();
+  }, []);
+
+  const fetchDocuments = async () => {
+    try {
+      const response = await ApiService.getDocuments();
+      const documentsWithStatus = await Promise.all(response.data.map(async (doc) => {
+        const status = await DocuSignService.getEnvelopeStatus(doc.id);
+        return { ...doc, signatureStatus: status };
+      }));
+      setDocuments(documentsWithStatus);
+    } catch (error) {
+      console.error('Error fetching documents:', error);
     }
-  ]);
+  };
+
+  const handleDocumentCreated = () => {
+    fetchDocuments();
+    setNotification({ open: true, message: 'Document created successfully!', severity: 'success' });
+  };
+
+  const handleNotificationClose = () => {
+    setNotification({ ...notification, open: false });
+  };
+
+  const handleSendForSignature = async (document) => {
+    try {
+      const recipientEmail = prompt('Enter recipient email');
+      const recipientName = prompt('Enter recipient name');
+      if (recipientEmail && recipientName) {
+        await DocuSignService.sendDocumentForSignature(document.id, recipientEmail, recipientName);
+        setNotification({ open: true, message: 'Document sent for signature!', severity: 'success' });
+      }
+    } catch (error) {
+      console.error('Error sending document for signature:', error);
+      setNotification({ open: true, message: 'Failed to send document for signature.', severity: 'error' });
+    }
+  };
 
   const handleClickOpen = () => {
     setOpen(true);
@@ -199,14 +182,18 @@ const DocumentsList = () => {
           <Typography variant="h4" component="h1">
             Documents
           </Typography>
-          <Button 
-            variant="contained" 
-            startIcon={<AddIcon />}
-            onClick={handleClickOpen}
-          >
+          <Button variant="contained" startIcon={<AddIcon />} onClick={handleClickOpen}>
             New Document
           </Button>
         </Box>
+
+        <DocumentGenerator onDocumentCreated={handleDocumentCreated} />
+
+        <Snackbar open={notification.open} autoHideDuration={6000} onClose={handleNotificationClose}>
+          <Alert onClose={handleNotificationClose} severity={notification.severity} sx={{ width: '100%' }}>
+            {notification.message}
+          </Alert>
+        </Snackbar>
 
         <Dialog open={open} onClose={handleClose}>
           <DialogTitle>Add New Document</DialogTitle>
@@ -357,6 +344,7 @@ const DocumentsList = () => {
                 <TableCell>Date Modified</TableCell>
                 <TableCell>Tags</TableCell>
                 <TableCell align="center">Shared</TableCell>
+                <TableCell align="center">Signature Status</TableCell>
                 <TableCell align="center">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -394,6 +382,9 @@ const DocumentsList = () => {
                       {document.shared ? 'Yes' : 'No'}
                     </TableCell>
                     <TableCell align="center">
+                      {document.signatureStatus || 'N/A'}
+                    </TableCell>
+                    <TableCell align="center">
                       <IconButton color="primary" title="View">
                         <VisibilityIcon />
                       </IconButton>
@@ -406,12 +397,19 @@ const DocumentsList = () => {
                       <IconButton color="error" title="Delete">
                         <DeleteIcon />
                       </IconButton>
+                      <Button 
+                        variant="outlined" 
+                        size="small" 
+                        onClick={() => handleSendForSignature(document)}
+                      >
+                        Send for Signature
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={6} align="center">
+                  <TableCell colSpan={7} align="center">
                     <Typography variant="subtitle1" sx={{ py: 2 }}>
                       No documents found matching your search criteria
                     </Typography>
