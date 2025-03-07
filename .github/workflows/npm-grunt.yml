@@ -12,21 +12,30 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [14.x, 16.x, 18.x]
+        node-version: [16.x, 18.x, 20.x]
     
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
         cache: 'npm'
 
-    - name: Install Dependencies
+    - name: Install Backend Dependencies
       run: |
+        cd backend
         npm install
-        npm install -g grunt-cli
-
-    - name: Build
-      run: grunt
+      
+    - name: Install Frontend Dependencies
+      run: |
+        cd frontend
+        npm install
+        
+    - name: Run Tests
+      run: |
+        cd backend
+        npm test
+        cd ../frontend
+        npm test
